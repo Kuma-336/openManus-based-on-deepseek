@@ -294,7 +294,7 @@ class Config:
         if daytona_config:
             daytona_settings = DaytonaSettings(**daytona_config)
         else:
-            daytona_settings = DaytonaSettings()
+            daytona_settings = None
 
         mcp_config = raw_config.get("mcp", {})
         mcp_settings = None
