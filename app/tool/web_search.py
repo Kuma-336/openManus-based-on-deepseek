@@ -8,6 +8,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.config import config
 from app.logger import logger
+from app.memory.persistent import PersistentMemory
 from app.tool.base import BaseTool, ToolResult
 from app.tool.search import (
     BaiduSearchEngine,
@@ -248,6 +249,22 @@ class WebSearch(BaseTool):
 
         search_params = {"lang": lang, "country": country}
 
+        # 查搜索缓存（fetch_content 模式跳过缓存，因为内容可能变化）
+        if not fetch_content:
+            cached = PersistentMemory.get_search_cache(query, num_results)
+            if cached is not None:
+                results = [SearchResult(**r) for r in cached]
+                return SearchResponse(
+                    status="success",
+                    query=query,
+                    results=results,
+                    metadata=SearchMetadata(
+                        total_results=len(results),
+                        language=lang,
+                        country=country,
+                    ),
+                )
+
         # Try searching with retries when all engines fail
         for retry_count in range(max_retries + 1):
             results = await self._try_all_engines(query, num_results, search_params)
@@ -256,6 +273,11 @@ class WebSearch(BaseTool):
                 # Fetch content if requested
                 if fetch_content:
                     results = await self._fetch_content_for_results(results)
+                else:
+                    # 写入缓存
+                    PersistentMemory.set_search_cache(
+                        query, num_results, [r.model_dump() for r in results]
+                    )
 
                 # Return a successful structured response
                 return SearchResponse(
